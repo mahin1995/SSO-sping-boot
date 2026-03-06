@@ -231,6 +231,6 @@ class ServiceAApplicationTests {
 
 		mockMvc.perform(get("/api/a/secure")
 						.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAfterRoleUpdate))
-				.andExpect(status().isForbidden());
+				.andExpect(status().isUnauthorized());
 	}
 }
