@@ -11,7 +11,8 @@ Both services trust JWTs issued by `service-a`.
 
 1. Java 21
 2. PostgreSQL (external instance)
-3. Internet access for first Maven wrapper dependency download
+3. Node.js 20+ (for React SPA)
+4. Internet access for first dependency download
 
 ## Environment variables
 
@@ -57,6 +58,16 @@ cd service-b
 .\mvnw spring-boot:run
 ```
 
+Start React SPA in a third terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open: `http://127.0.0.1:8085`
+
 ## Swagger UI
 
 1. Service A Swagger UI: `http://localhost:9000/swagger-ui.html`
@@ -66,6 +77,21 @@ cd service-b
 2. `http://localhost:9001/v3/api-docs`
 
 To call protected endpoints from Swagger, click **Authorize** and paste a bearer token from `service-a`.
+
+## React SPA PKCE demo
+
+The `frontend/` app demonstrates:
+
+1. OAuth2 Authorization Code + PKCE login using `pkce-client`
+2. Token exchange from browser (`/oauth2/token`)
+3. Calling:
+1. `GET /api/a/secure`
+2. `GET /api/b/secure`
+
+Notes:
+
+1. Default `pkce-client` redirect URI in `service-a` is already `http://127.0.0.1:8085/callback`.
+2. CORS is enabled in both services for `http://127.0.0.1:8085` and `http://localhost:8085`.
 
 ## Custom user registration and login API (service-a)
 
