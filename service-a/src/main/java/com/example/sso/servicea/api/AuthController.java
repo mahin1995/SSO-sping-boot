@@ -38,7 +38,7 @@ public class AuthController {
 	}
 
 	@PostMapping("/login")
-	@Operation(summary = "Authenticate with username/password and return JWT", security = {})
+	@Operation(summary = "Authenticate with username/password and return access token (JWE or opaque)", security = {})
 	public ResponseEntity<ApiResponse<AuthService.LoginToken>> login(@RequestBody LoginRequest request) {
 		AuthService.LoginToken loginToken = authService.login(
 				new AuthService.LoginCommand(request.username(), request.password())
@@ -47,7 +47,7 @@ public class AuthController {
 	}
 
 	@PostMapping("/service-token")
-	@Operation(summary = "Issue machine token with service client credentials", security = {})
+	@Operation(summary = "Issue machine token with service client credentials (JWE or opaque)", security = {})
 	public ResponseEntity<ApiResponse<AuthService.LoginToken>> issueServiceToken(@RequestBody ServiceTokenRequest request) {
 		AuthService.LoginToken loginToken = authService.issueServiceToken(
 				new AuthService.ServiceTokenCommand(request.clientId(), request.clientSecret())

@@ -17,7 +17,7 @@ public class OpenApiConfig {
 				.info(new Info()
 						.title("Service B API")
 						.version("v1")
-						.description("Protected Service B endpoint"))
+						.description("Protected Service B endpoint with token mode support (JWE or opaque)"))
 				.components(new Components()
 						.addSecuritySchemes("bearerAuth", new SecurityScheme()
 								.type(SecurityScheme.Type.HTTP)
@@ -26,4 +26,3 @@ public class OpenApiConfig {
 				.addSecurityItem(new SecurityRequirement().addList("bearerAuth"));
 	}
 }
-

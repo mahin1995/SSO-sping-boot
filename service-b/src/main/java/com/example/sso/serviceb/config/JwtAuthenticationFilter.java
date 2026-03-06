@@ -2,22 +2,23 @@ package com.example.sso.serviceb.config;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -25,9 +26,23 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
 	private final JwtDecoder jwtDecoder;
+	private final JweTokenService jweTokenService;
+	private final OpaqueIntrospectionClient opaqueIntrospectionClient;
+	private final TokenMode tokenMode;
+	private final String expectedAudience;
 
-	public JwtAuthenticationFilter(JwtDecoder jwtDecoder) {
+	public JwtAuthenticationFilter(
+			JwtDecoder jwtDecoder,
+			JweTokenService jweTokenService,
+			OpaqueIntrospectionClient opaqueIntrospectionClient,
+			@Value("${service-b.token.mode:jwe}") String tokenModeRaw,
+			@Value("${service-b.audience}") String expectedAudience
+	) {
 		this.jwtDecoder = jwtDecoder;
+		this.jweTokenService = jweTokenService;
+		this.opaqueIntrospectionClient = opaqueIntrospectionClient;
+		this.tokenMode = TokenMode.from(tokenModeRaw);
+		this.expectedAudience = expectedAudience;
 	}
 
 	@Override
@@ -58,17 +73,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
 		String tokenValue = authorizationHeader.substring("Bearer ".length()).trim();
 		try {
-			Jwt jwt = jwtDecoder.decode(tokenValue);
-			UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-					jwt.getSubject(),
-					tokenValue,
-					extractAuthorities(jwt)
-			);
-			authentication.setDetails(jwt.getClaims());
+			UsernamePasswordAuthenticationToken authentication = authenticate(tokenValue);
 			SecurityContextHolder.getContext().setAuthentication(authentication);
 			filterChain.doFilter(request, response);
 		}
-		catch (JwtException ex) {
+		catch (Exception ex) {
 			SecurityContextHolder.clearContext();
 			response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 			response.setContentType("application/json");
@@ -76,9 +85,52 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 		}
 	}
 
-	private Collection<? extends GrantedAuthority> extractAuthorities(Jwt jwt) {
+	private UsernamePasswordAuthenticationToken authenticate(String tokenValue) {
+		if (tokenMode == TokenMode.JWE) {
+			String signedJwt = jweTokenService.decryptToSignedJwt(tokenValue);
+			var jwt = jwtDecoder.decode(signedJwt);
+			UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+					jwt.getSubject(),
+					tokenValue,
+					extractAuthorities(jwt.getClaims())
+			);
+			authentication.setDetails(jwt.getClaims());
+			return authentication;
+		}
+
+		if (tokenMode == TokenMode.OPAQUE) {
+			OpaqueIntrospectionClient.OpaqueIntrospectionResult introspection = opaqueIntrospectionClient.introspect(tokenValue);
+			if (!introspection.active()) {
+				throw new IllegalStateException("Token is inactive");
+			}
+			if (!introspection.audience().contains(expectedAudience)) {
+				throw new IllegalStateException("Token audience is not valid");
+			}
+
+			Map<String, Object> claims = new LinkedHashMap<>();
+			claims.put("sub", introspection.subject());
+			claims.put("scope", introspection.scopeAsString());
+			claims.put("aud", introspection.audience());
+			claims.put("iss", introspection.issuer());
+			if (introspection.tokenId() != null) {
+				claims.put("jti", introspection.tokenId());
+			}
+
+			UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+					introspection.subject(),
+					tokenValue,
+					extractAuthorities(claims)
+			);
+			authentication.setDetails(claims);
+			return authentication;
+		}
+
+		throw new IllegalStateException("Unsupported token mode: " + tokenMode);
+	}
+
+	private Collection<? extends GrantedAuthority> extractAuthorities(Map<String, Object> claims) {
 		Set<String> scopes = new LinkedHashSet<>();
-		Object scopeClaim = jwt.getClaims().get("scope");
+		Object scopeClaim = claims.get("scope");
 		if (scopeClaim instanceof String scopeString) {
 			for (String scope : scopeString.split("\\s+")) {
 				String normalized = scope.trim();
@@ -88,7 +140,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 			}
 		}
 
-		Object scpClaim = jwt.getClaims().get("scp");
+		Object scpClaim = claims.get("scp");
 		if (scpClaim instanceof Collection<?> scpCollection) {
 			for (Object value : scpCollection) {
 				if (value != null) {

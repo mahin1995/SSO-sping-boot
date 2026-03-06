@@ -48,7 +48,7 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers("/actuator/health", "/actuator/info").permitAll()
 						.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-						.requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/service-token", "/api/auth/jwks").permitAll()
+						.requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/service-token", "/api/auth/jwks", "/api/auth/introspect").permitAll()
 						.requestMatchers("/.well-known/jwks.json").permitAll()
 						.requestMatchers("/api/admin/**").hasAuthority("SCOPE_service.a.read")
 						.requestMatchers("/api/a/secure").hasAuthority("SCOPE_service.a.read")

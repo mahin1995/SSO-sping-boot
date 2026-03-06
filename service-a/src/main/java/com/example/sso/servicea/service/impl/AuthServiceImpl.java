@@ -10,6 +10,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.example.sso.servicea.config.JweTokenService;
+import com.example.sso.servicea.config.TokenMode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,6 +28,7 @@ import org.springframework.stereotype.Service;
 
 import com.example.sso.servicea.service.AppUserAccountService;
 import com.example.sso.servicea.service.AuthService;
+import com.example.sso.servicea.service.OpaqueTokenService;
 
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -42,12 +45,17 @@ public class AuthServiceImpl implements AuthService {
 	private final String serviceClientId;
 	private final String serviceClientSecret;
 	private final Set<String> serviceClientScopes;
+	private final TokenMode tokenMode;
+	private final JweTokenService jweTokenService;
+	private final OpaqueTokenService opaqueTokenService;
 
 	public AuthServiceImpl(
 			AppUserAccountService appUserAccountService,
 			PasswordEncoder passwordEncoder,
 			AuthenticationManager authenticationManager,
 			JwtEncoder jwtEncoder,
+			JweTokenService jweTokenService,
+			OpaqueTokenService opaqueTokenService,
 			@Value("${service-a.issuer}") String issuer,
 			@Value("${service-a.audiences.service-a}") String serviceAAudience,
 			@Value("${service-a.audiences.service-b}") String serviceBAudience,
@@ -55,12 +63,15 @@ public class AuthServiceImpl implements AuthService {
 			@Value("${service-a.keys.key-id:service-a-key}") String signingKeyId,
 			@Value("${service-a.service-client.id:internal-client}") String serviceClientId,
 			@Value("${service-a.service-client.secret:internal-secret}") String serviceClientSecret,
-			@Value("${service-a.service-client.scopes:service.a.read,service.b.read}") String serviceClientScopesRaw
+			@Value("${service-a.service-client.scopes:service.a.read,service.b.read}") String serviceClientScopesRaw,
+			@Value("${service-a.token.mode:jwe}") String tokenModeRaw
 	) {
 		this.appUserAccountService = appUserAccountService;
 		this.passwordEncoder = passwordEncoder;
 		this.authenticationManager = authenticationManager;
 		this.jwtEncoder = jwtEncoder;
+		this.jweTokenService = jweTokenService;
+		this.opaqueTokenService = opaqueTokenService;
 		this.issuer = issuer;
 		this.serviceAAudience = serviceAAudience;
 		this.serviceBAudience = serviceBAudience;
@@ -69,6 +80,7 @@ public class AuthServiceImpl implements AuthService {
 		this.serviceClientId = serviceClientId;
 		this.serviceClientSecret = serviceClientSecret;
 		this.serviceClientScopes = normalizeServiceClientScopes(serviceClientScopesRaw);
+		this.tokenMode = TokenMode.from(tokenModeRaw);
 	}
 
 	@Override
@@ -158,24 +170,35 @@ public class AuthServiceImpl implements AuthService {
 		Instant issuedAt = Instant.now();
 		Instant expiresAt = issuedAt.plus(customLoginTokenTtl);
 		List<String> audiences = resolveAudiences(scopes);
+		String tokenId = UUID.randomUUID().toString();
 
-		JwtClaimsSet.Builder claimsBuilder = JwtClaimsSet.builder()
-				.issuer(issuer)
-				.subject(subject)
-				.id(UUID.randomUUID().toString())
-				.issuedAt(issuedAt)
-				.expiresAt(expiresAt)
-				.claim("scope", String.join(" ", scopes));
+		String tokenValue;
+		if (tokenMode == TokenMode.JWE) {
+			JwtClaimsSet.Builder claimsBuilder = JwtClaimsSet.builder()
+					.issuer(issuer)
+					.subject(subject)
+					.id(tokenId)
+					.issuedAt(issuedAt)
+					.expiresAt(expiresAt)
+					.claim("scope", String.join(" ", scopes));
 
-		if (!audiences.isEmpty()) {
-			claimsBuilder.audience(audiences);
+			if (!audiences.isEmpty()) {
+				claimsBuilder.audience(audiences);
+			}
+
+			String signedJwt = jwtEncoder.encode(JwtEncoderParameters.from(
+							JwsHeader.with(SignatureAlgorithm.RS256).type("JWT").keyId(signingKeyId).build(),
+							claimsBuilder.build()
+					))
+					.getTokenValue();
+			tokenValue = jweTokenService.encryptSignedJwt(signedJwt);
 		}
-
-		String tokenValue = jwtEncoder.encode(JwtEncoderParameters.from(
-						JwsHeader.with(SignatureAlgorithm.RS256).type("JWT").keyId(signingKeyId).build(),
-						claimsBuilder.build()
-				))
-				.getTokenValue();
+		else if (tokenMode == TokenMode.OPAQUE) {
+			tokenValue = opaqueTokenService.issueToken(subject, scopes, audiences, issuedAt, expiresAt, issuer, tokenId);
+		}
+		else {
+			throw new IllegalStateException("Unsupported token mode: " + tokenMode);
+		}
 
 		return new LoginToken(
 				tokenValue,

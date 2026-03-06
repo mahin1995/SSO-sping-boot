@@ -71,12 +71,17 @@ class ServiceAApplicationTests {
 				"select count(*) from information_schema.tables where table_name = 'app_role_scopes'",
 				Integer.class
 		);
+		Integer opaqueTokensTableCount = jdbcTemplate.queryForObject(
+				"select count(*) from information_schema.tables where table_name = 'opaque_access_tokens'",
+				Integer.class
+		);
 
 		assertThat(appUsersTableCount).isGreaterThanOrEqualTo(1);
 		assertThat(appRolesTableCount).isGreaterThanOrEqualTo(1);
 		assertThat(appScopesTableCount).isGreaterThanOrEqualTo(1);
 		assertThat(appUserRolesTableCount).isGreaterThanOrEqualTo(1);
 		assertThat(appRoleScopesTableCount).isGreaterThanOrEqualTo(1);
+		assertThat(opaqueTokensTableCount).isGreaterThanOrEqualTo(1);
 	}
 
 	@Test

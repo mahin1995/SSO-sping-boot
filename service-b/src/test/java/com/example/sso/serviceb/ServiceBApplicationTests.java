@@ -22,6 +22,7 @@ import org.springframework.security.oauth2.jwt.JwtValidationException;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 
@@ -35,8 +36,13 @@ class ServiceBApplicationTests {
 	@MockBean
 	private JwtDecoder jwtDecoder;
 
+	@MockBean
+	private com.example.sso.serviceb.config.JweTokenService jweTokenService;
+
 	@BeforeEach
 	void setupMockDecoder() {
+		doAnswer(invocation -> invocation.getArgument(0)).when(jweTokenService).decryptToSignedJwt(anyString());
+
 		doThrow(validationError("Invalid token")).when(jwtDecoder).decode(anyString());
 
 		doReturn(jwtToken(

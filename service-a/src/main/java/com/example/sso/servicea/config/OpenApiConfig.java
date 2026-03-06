@@ -17,7 +17,7 @@ public class OpenApiConfig {
 				.info(new Info()
 						.title("Service A API")
 						.version("v1")
-						.description("JWT issuer + protected Service A endpoint"))
+						.description("Token issuer (JWE or opaque) + protected Service A endpoint"))
 				.components(new Components()
 						.addSecuritySchemes("bearerAuth", new SecurityScheme()
 								.type(SecurityScheme.Type.HTTP)
