@@ -84,6 +84,60 @@ $env:SERVICE_A_PUBLIC_KEY_PATH="D:\\keys\\public.pem"
 $env:SERVICE_A_KEY_ID="key-v2"
 ```
 
+Generate RSA key pair (Linux/macOS):
+
+```bash
+mkdir -p keys
+openssl genpkey -algorithm RSA -out keys/private.pem -pkeyopt rsa_keygen_bits:2048
+openssl rsa -pubout -in keys/private.pem -out keys/public.pem
+```
+
+Generate RSA key pair (Windows PowerShell + OpenSSL):
+
+```powershell
+New-Item -ItemType Directory -Path keys -Force | Out-Null
+openssl genpkey -algorithm RSA -out keys/private.pem -pkeyopt rsa_keygen_bits:2048
+openssl rsa -pubout -in keys/private.pem -out keys/public.pem
+```
+
+Generate RSA key pair (Windows CMD + OpenSSL):
+
+```cmd
+if not exist keys mkdir keys
+openssl genpkey -algorithm RSA -out keys\private.pem -pkeyopt rsa_keygen_bits:2048
+openssl rsa -pubout -in keys\private.pem -out keys\public.pem
+```
+
+Generate RSA key pair (Windows without OpenSSL, Java 21):
+
+```powershell
+$source = @'
+import java.nio.file.*;
+import java.security.*;
+import java.util.Base64;
+
+public class GenRsaPem {
+  public static void main(String[] args) throws Exception {
+    Path dir = Paths.get("keys");
+    Files.createDirectories(dir);
+    KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+    kpg.initialize(2048);
+    KeyPair kp = kpg.generateKeyPair();
+    writePem(dir.resolve("private.pem"), "PRIVATE KEY", kp.getPrivate().getEncoded());
+    writePem(dir.resolve("public.pem"), "PUBLIC KEY", kp.getPublic().getEncoded());
+  }
+  private static void writePem(Path path, String type, byte[] der) throws Exception {
+    String b64 = Base64.getMimeEncoder(64, new byte[] {'\n'}).encodeToString(der);
+    String pem = "-----BEGIN " + type + "-----\n" + b64 + "\n-----END " + type + "-----\n";
+    Files.writeString(path, pem);
+  }
+}
+'@
+$tmp = Join-Path $env:TEMP "GenRsaPem.java"
+Set-Content -Path $tmp -Value $source -Encoding Ascii
+java $tmp
+```
+
 Optional key rotation (old public keys):
 
 ```powershell
