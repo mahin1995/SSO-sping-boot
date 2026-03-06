@@ -5,6 +5,8 @@ const DEFAULT_SERVICE_A = "http://localhost:9000";
 const DEFAULT_SERVICE_B = "http://localhost:9001";
 const DEFAULT_CLIENT_ID = "pkce-client";
 const DEFAULT_SCOPE = "openid service.a.read service.b.read";
+const DEFAULT_USERNAME = "demo";
+const DEFAULT_PASSWORD = "1234";
 const TOKEN_STORAGE_KEY = "sso_pkce_token";
 const CODE_VERIFIER_KEY = "sso_pkce_code_verifier";
 const OAUTH_STATE_KEY = "sso_pkce_state";
@@ -56,6 +58,47 @@ function decodeJwtPayload(accessToken) {
   }
 }
 
+function normalizeTokenResponse(token) {
+  if (!token || typeof token !== "object") {
+    return null;
+  }
+
+  if (token.access_token) {
+    return token;
+  }
+
+  if (token.accessToken) {
+    return {
+      access_token: token.accessToken,
+      token_type: token.tokenType ?? "Bearer",
+      expires_in: token.expiresIn ?? token.expires_in ?? 0,
+      scope: token.scope ?? "",
+      audience: token.audience ?? []
+    };
+  }
+
+  return null;
+}
+
+function extractErrorMessage(parsed) {
+  if (!parsed) {
+    return "Request failed.";
+  }
+  if (typeof parsed === "string") {
+    return parsed;
+  }
+  if (parsed.message) {
+    return parsed.message;
+  }
+  if (parsed.error_description) {
+    return parsed.error_description;
+  }
+  if (parsed.error) {
+    return typeof parsed.error === "string" ? parsed.error : JSON.stringify(parsed.error);
+  }
+  return JSON.stringify(parsed);
+}
+
 export default function App() {
   const [authServerUrl, setAuthServerUrl] = useState(DEFAULT_AUTH_SERVER);
   const [serviceAUrl, setServiceAUrl] = useState(DEFAULT_SERVICE_A);
@@ -69,11 +112,15 @@ export default function App() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isCallbackProcessing, setIsCallbackProcessing] = useState(false);
+  const [isDirectLoginLoading, setIsDirectLoginLoading] = useState(false);
+  const [username, setUsername] = useState(DEFAULT_USERNAME);
+  const [password, setPassword] = useState(DEFAULT_PASSWORD);
 
   useEffect(() => {
     const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (storedToken) {
-      setTokenResponse(parseJsonSafe(storedToken));
+      const parsed = parseJsonSafe(storedToken);
+      setTokenResponse(normalizeTokenResponse(parsed) ?? parsed);
     }
   }, []);
 
@@ -135,11 +182,16 @@ export default function App() {
         const raw = await response.text();
         const parsed = parseJsonSafe(raw);
         if (!response.ok) {
-          throw new Error(typeof parsed === "string" ? parsed : JSON.stringify(parsed));
+          throw new Error(extractErrorMessage(parsed));
         }
 
-        setTokenResponse(parsed);
-        localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(parsed));
+        const normalizedToken = normalizeTokenResponse(parsed);
+        if (!normalizedToken) {
+          throw new Error("Token response is missing access token.");
+        }
+
+        setTokenResponse(normalizedToken);
+        localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(normalizedToken));
         setStatus("Token received successfully.");
       } catch (callbackError) {
         setError(callbackError.message || "Failed to exchange code.");
@@ -156,6 +208,52 @@ export default function App() {
 
   const accessToken = tokenResponse?.access_token ?? tokenResponse?.accessToken ?? "";
   const tokenPayload = useMemo(() => decodeJwtPayload(accessToken), [accessToken]);
+
+  const loginWithServiceAApi = async () => {
+    setError("");
+    setStatus("");
+
+    const normalizedUsername = username.trim();
+    const normalizedPassword = password.trim();
+    if (!normalizedUsername || !normalizedPassword) {
+      setError("Username and password are required.");
+      return;
+    }
+
+    setIsDirectLoginLoading(true);
+    try {
+      const response = await fetch(`${authServerUrl}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          username: normalizedUsername,
+          password: normalizedPassword
+        })
+      });
+
+      const raw = await response.text();
+      const parsed = parseJsonSafe(raw);
+      if (!response.ok) {
+        throw new Error(extractErrorMessage(parsed));
+      }
+
+      const loginPayload = parsed?.data ?? parsed;
+      const normalizedToken = normalizeTokenResponse(loginPayload);
+      if (!normalizedToken) {
+        throw new Error("Login API did not return an access token.");
+      }
+
+      setTokenResponse(normalizedToken);
+      localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(normalizedToken));
+      setStatus("Direct login successful. Access token stored.");
+    } catch (loginError) {
+      setError(loginError.message || "Direct login failed.");
+    } finally {
+      setIsDirectLoginLoading(false);
+    }
+  };
 
   const startPkceLogin = async () => {
     setError("");
@@ -184,7 +282,7 @@ export default function App() {
     setStatus("");
 
     if (!accessToken) {
-      setError("No access token found. Login with PKCE first.");
+      setError("No access token found. Login first (Direct login or PKCE).");
       return;
     }
 
@@ -223,7 +321,30 @@ export default function App() {
     <div className="page">
       <main className="panel">
         <h1>OAuth2 PKCE SPA Demo</h1>
-        <p className="subtitle">React app using service-a authorization server.</p>
+        <p className="subtitle">React app using service-a authorization server and custom login API.</p>
+
+        <section className="section">
+          <h2>Direct Login (service-a /api/auth/login)</h2>
+          <div className="grid">
+            <label>
+              Username
+              <input value={username} onChange={(event) => setUsername(event.target.value)} />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="actions">
+            <button onClick={loginWithServiceAApi} disabled={isDirectLoginLoading || isCallbackProcessing}>
+              {isDirectLoginLoading ? "Logging in..." : "Login via service-a API"}
+            </button>
+          </div>
+        </section>
 
         <section className="section">
           <h2>OAuth Client Settings</h2>

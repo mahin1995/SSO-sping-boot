@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service A Login</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            background: radial-gradient(circle at top right, #e8f0ff, #f5f8ff 50%, #eef6f2);
+            color: #14213d;
+        }
+
+        .card {
+            width: min(420px, calc(100vw - 2rem));
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 14px 42px rgba(20, 33, 61, 0.12);
+            padding: 1.5rem;
+            border: 1px solid #dce6f8;
+        }
+
+        h1 {
+            margin: 0 0 0.4rem;
+            font-size: 1.4rem;
+        }
+
+        p.subtitle {
+            margin: 0 0 1rem;
+            color: #435b84;
+            font-size: 0.95rem;
+        }
+
+        label {
+            display: block;
+            margin-top: 0.8rem;
+            margin-bottom: 0.35rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #b8c8e8;
+            border-radius: 10px;
+            padding: 0.68rem 0.75rem;
+            font-size: 0.95rem;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #3a7afe;
+            box-shadow: 0 0 0 3px rgba(58, 122, 254, 0.15);
+        }
+
+        button {
+            width: 100%;
+            margin-top: 1rem;
+            border: 0;
+            border-radius: 10px;
+            padding: 0.72rem 0.8rem;
+            font-size: 0.96rem;
+            font-weight: 700;
+            color: #ffffff;
+            background: linear-gradient(90deg, #2f7ef7, #2f9ac0);
+            cursor: pointer;
+        }
+
+        .message {
+            margin-top: 0.8rem;
+            border-radius: 10px;
+            padding: 0.65rem 0.75rem;
+            font-size: 0.9rem;
+        }
+
+        .message.error {
+            color: #8a1324;
+            background: #ffe5eb;
+            border: 1px solid #ffc4cf;
+        }
+
+        .message.success {
+            color: #0f5132;
+            background: #d1f4df;
+            border: 1px solid #aeeac5;
+        }
+    </style>
+</head>
+<body>
+<main class="card">
+    <h1>Sign in to Service A</h1>
+    <p class="subtitle">Custom Thymeleaf login page for OAuth2 and API authentication.</p>
+
+    <form th:action="@{/login}" method="post">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <button type="submit">Login</button>
+    </form>
+
+    <div class="message error" th:if="${hasError}">
+        Invalid username or password.
+    </div>
+    <div class="message success" th:if="${loggedOut}">
+        You have been logged out.
+    </div>
+</main>
+</body>
+</html>

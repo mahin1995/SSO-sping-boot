@@ -9,6 +9,7 @@ import java.security.interfaces.RSAPublicKey;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -19,6 +20,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
@@ -52,6 +54,9 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
@@ -72,7 +77,10 @@ public class SecurityConfig {
 
 		http
 				.securityMatcher(endpointsMatcher)
-				.authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
+				.authorizeHttpRequests(authorize -> authorize
+						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+						.anyRequest().authenticated())
+				.cors(Customizer.withDefaults())
 				.csrf(csrf -> csrf.ignoringRequestMatchers(endpointsMatcher))
 				.exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/login")))
 				.with(authorizationServerConfigurer, configurer -> configurer.oidc(Customizer.withDefaults()));
@@ -84,14 +92,19 @@ public class SecurityConfig {
 	@org.springframework.core.annotation.Order(2)
 	SecurityFilterChain appSecurityFilterChain(HttpSecurity http) throws Exception {
 		http.authorizeHttpRequests(authorize -> authorize
+						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+						.requestMatchers("/.well-known/appspecific/**").permitAll()
+						.requestMatchers("/error", "/favicon.ico").permitAll()
+						.requestMatchers("/login").permitAll()
 						.requestMatchers("/actuator/health", "/actuator/info").permitAll()
 						.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
 						.requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
 						.requestMatchers("/api/admin/**").hasAuthority("SCOPE_service.a.read")
 						.requestMatchers("/api/a/secure").hasAuthority("SCOPE_service.a.read")
 						.anyRequest().authenticated())
+				.cors(Customizer.withDefaults())
 				.csrf(csrf -> csrf.ignoringRequestMatchers("/api/auth/**", "/api/admin/**"))
-				.formLogin(Customizer.withDefaults())
+				.formLogin(form -> form.loginPage("/login").permitAll())
 				.oauth2ResourceServer(resourceServer -> resourceServer.jwt(Customizer.withDefaults()));
 		return http.build();
 	}
@@ -200,6 +213,21 @@ public class SecurityConfig {
 	@Bean
 	ClientSettings defaultClientSettings() {
 		return ClientSettings.builder().requireAuthorizationConsent(false).build();
+	}
+
+	@Bean
+	CorsConfigurationSource corsConfigurationSource(
+			@Value("${app.cors.allowed-origins:http://127.0.0.1:8085,http://localhost:8085}") List<String> allowedOrigins
+	) {
+		CorsConfiguration configuration = new CorsConfiguration();
+		configuration.setAllowedOrigins(allowedOrigins);
+		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+		configuration.setAllowedHeaders(List.of("*"));
+		configuration.setAllowCredentials(false);
+		configuration.setExposedHeaders(List.of("Authorization"));
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", configuration);
+		return source;
 	}
 
 	private RsaKeyPair resolveRsaKeyPair(Environment environment) {
