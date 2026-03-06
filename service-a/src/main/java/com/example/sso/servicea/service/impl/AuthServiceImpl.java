@@ -3,9 +3,11 @@ package com.example.sso.servicea.service.impl;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +38,10 @@ public class AuthServiceImpl implements AuthService {
 	private final String serviceAAudience;
 	private final String serviceBAudience;
 	private final Duration customLoginTokenTtl;
+	private final String signingKeyId;
+	private final String serviceClientId;
+	private final String serviceClientSecret;
+	private final Set<String> serviceClientScopes;
 
 	public AuthServiceImpl(
 			AppUserAccountService appUserAccountService,
@@ -45,7 +51,11 @@ public class AuthServiceImpl implements AuthService {
 			@Value("${service-a.issuer}") String issuer,
 			@Value("${service-a.audiences.service-a}") String serviceAAudience,
 			@Value("${service-a.audiences.service-b}") String serviceBAudience,
-			@Value("${service-a.custom-login.token-ttl-minutes:10}") long tokenTtlMinutes
+			@Value("${service-a.custom-login.token-ttl-minutes:10}") long tokenTtlMinutes,
+			@Value("${service-a.keys.key-id:service-a-key}") String signingKeyId,
+			@Value("${service-a.service-client.id:internal-client}") String serviceClientId,
+			@Value("${service-a.service-client.secret:internal-secret}") String serviceClientSecret,
+			@Value("${service-a.service-client.scopes:service.a.read,service.b.read}") String serviceClientScopesRaw
 	) {
 		this.appUserAccountService = appUserAccountService;
 		this.passwordEncoder = passwordEncoder;
@@ -55,6 +65,10 @@ public class AuthServiceImpl implements AuthService {
 		this.serviceAAudience = serviceAAudience;
 		this.serviceBAudience = serviceBAudience;
 		this.customLoginTokenTtl = Duration.ofMinutes(tokenTtlMinutes);
+		this.signingKeyId = signingKeyId;
+		this.serviceClientId = serviceClientId;
+		this.serviceClientSecret = serviceClientSecret;
+		this.serviceClientScopes = normalizeServiceClientScopes(serviceClientScopesRaw);
 	}
 
 	@Override
@@ -99,34 +113,18 @@ public class AuthServiceImpl implements AuthService {
 				.map(authority -> authority.substring("SCOPE_".length()))
 				.collect(Collectors.toCollection(LinkedHashSet::new));
 
-		Instant issuedAt = Instant.now();
-		Instant expiresAt = issuedAt.plus(customLoginTokenTtl);
-		List<String> audiences = resolveAudiences(scopes);
+		return buildToken(authentication.getName(), scopes);
+	}
 
-		JwtClaimsSet.Builder claimsBuilder = JwtClaimsSet.builder()
-				.issuer(issuer)
-				.subject(authentication.getName())
-				.issuedAt(issuedAt)
-				.expiresAt(expiresAt)
-				.claim("scope", String.join(" ", scopes));
+	@Override
+	public LoginToken issueServiceToken(ServiceTokenCommand command) {
+		String clientId = normalizeRequired(command.clientId(), "clientId");
+		String clientSecret = normalizeRequired(command.clientSecret(), "clientSecret");
 
-		if (!audiences.isEmpty()) {
-			claimsBuilder.audience(audiences);
+		if (!serviceClientId.equals(clientId) || !serviceClientSecret.equals(clientSecret)) {
+			throw new InvalidCredentialsException("Invalid client credentials");
 		}
-
-		String tokenValue = jwtEncoder.encode(JwtEncoderParameters.from(
-						JwsHeader.with(SignatureAlgorithm.RS256).type("JWT").build(),
-						claimsBuilder.build()
-				))
-				.getTokenValue();
-
-		return new LoginToken(
-				tokenValue,
-				"Bearer",
-				customLoginTokenTtl.getSeconds(),
-				String.join(" ", scopes),
-				audiences
-		);
+		return buildToken("service-client:" + clientId, serviceClientScopes);
 	}
 
 	private Set<String> normalizeRoles(Set<String> roles) {
@@ -154,6 +152,49 @@ public class AuthServiceImpl implements AuthService {
 			audiences.add(serviceBAudience);
 		}
 		return new ArrayList<>(audiences);
+	}
+
+	private LoginToken buildToken(String subject, Set<String> scopes) {
+		Instant issuedAt = Instant.now();
+		Instant expiresAt = issuedAt.plus(customLoginTokenTtl);
+		List<String> audiences = resolveAudiences(scopes);
+
+		JwtClaimsSet.Builder claimsBuilder = JwtClaimsSet.builder()
+				.issuer(issuer)
+				.subject(subject)
+				.id(UUID.randomUUID().toString())
+				.issuedAt(issuedAt)
+				.expiresAt(expiresAt)
+				.claim("scope", String.join(" ", scopes));
+
+		if (!audiences.isEmpty()) {
+			claimsBuilder.audience(audiences);
+		}
+
+		String tokenValue = jwtEncoder.encode(JwtEncoderParameters.from(
+						JwsHeader.with(SignatureAlgorithm.RS256).type("JWT").keyId(signingKeyId).build(),
+						claimsBuilder.build()
+				))
+				.getTokenValue();
+
+		return new LoginToken(
+				tokenValue,
+				"Bearer",
+				customLoginTokenTtl.getSeconds(),
+				String.join(" ", scopes),
+				audiences
+		);
+	}
+
+	private Set<String> normalizeServiceClientScopes(String serviceClientScopesRaw) {
+		Set<String> scopes = Arrays.stream(serviceClientScopesRaw.split(","))
+				.map(String::trim)
+				.filter(scope -> !scope.isEmpty())
+				.collect(Collectors.toCollection(LinkedHashSet::new));
+		if (scopes.isEmpty()) {
+			throw new IllegalStateException("service-a.service-client.scopes must contain at least one scope");
+		}
+		return scopes;
 	}
 
 	private String normalizeRequired(String value, String fieldName) {

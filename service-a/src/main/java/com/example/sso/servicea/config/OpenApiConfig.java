@@ -17,7 +17,7 @@ public class OpenApiConfig {
 				.info(new Info()
 						.title("Service A API")
 						.version("v1")
-						.description("Authorization Server + protected Service A endpoint"))
+						.description("JWT issuer + protected Service A endpoint"))
 				.components(new Components()
 						.addSecuritySchemes("bearerAuth", new SecurityScheme()
 								.type(SecurityScheme.Type.HTTP)
@@ -26,4 +26,3 @@ public class OpenApiConfig {
 				.addSecurityItem(new SecurityRequirement().addList("bearerAuth"));
 	}
 }
-

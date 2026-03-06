@@ -46,9 +46,21 @@ public class AuthController {
 		return ResponseEntity.ok(ApiResponse.ok("Login successful", loginToken));
 	}
 
+	@PostMapping("/service-token")
+	@Operation(summary = "Issue machine token with service client credentials", security = {})
+	public ResponseEntity<ApiResponse<AuthService.LoginToken>> issueServiceToken(@RequestBody ServiceTokenRequest request) {
+		AuthService.LoginToken loginToken = authService.issueServiceToken(
+				new AuthService.ServiceTokenCommand(request.clientId(), request.clientSecret())
+		);
+		return ResponseEntity.ok(ApiResponse.ok("Service token issued", loginToken));
+	}
+
 	public record RegisterUserRequest(String username, String password, Set<String> roles) {
 	}
 
 	public record LoginRequest(String username, String password) {
+	}
+
+	public record ServiceTokenRequest(String clientId, String clientSecret) {
 	}
 }

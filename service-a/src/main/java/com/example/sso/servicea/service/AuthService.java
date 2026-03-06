@@ -9,6 +9,8 @@ public interface AuthService {
 
 	LoginToken login(LoginCommand command);
 
+	LoginToken issueServiceToken(ServiceTokenCommand command);
+
 	record RegisterUserCommand(String username, String password, Set<String> roles) {
 	}
 
@@ -16,6 +18,9 @@ public interface AuthService {
 	}
 
 	record LoginCommand(String username, String password) {
+	}
+
+	record ServiceTokenCommand(String clientId, String clientSecret) {
 	}
 
 	record LoginToken(

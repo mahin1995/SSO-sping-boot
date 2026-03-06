@@ -1,30 +1,46 @@
-# Two-Service OAuth2 Setup (Spring Boot)
+# Two-Service Custom JWT Setup
 
-This repo contains two services:
+This repo runs with 2 Spring Boot services:
 
-1. `service-a` (port `9000`): OAuth2 Authorization Server + Resource Server  
-2. `service-b` (port `9001`): Resource Server
+1. `service-a` (`http://localhost:9000`)
+   - Issues custom JWT tokens
+   - Exposes JWKS public keys
+   - Protects `/api/a/secure`
+2. `service-b` (`http://localhost:9001`)
+   - Validates `service-a` JWT tokens via JWKS
+   - Protects `/api/b/secure`
 
-Both services trust JWTs issued by `service-a`.
+No OAuth2 authorization flow is used.
 
 ## Prerequisites
 
 1. Java 21
-2. PostgreSQL (external instance)
-3. Node.js 20+ (for React SPA)
-4. Internet access for first dependency download
+2. PostgreSQL
 
-## Environment variables
+## Use .env (Windows Friendly)
 
-Set DB credentials for `service-a`:
+1. Copy `.env.example` to `.env`
+2. Edit values in `.env`
+3. Run services with scripts:
+
+```powershell
+.\scripts\run-service-a.ps1
+.\scripts\run-service-b.ps1
+```
+
+This loads env vars from `.env` for the current process and starts each service.
+
+## Environment Variables
+
+Database for `service-a`:
 
 ```powershell
 $env:SERVICE_A_DB_URL="jdbc:postgresql://localhost:5432/service_a"
 $env:SERVICE_A_DB_USERNAME="postgres"
-$env:SERVICE_A_DB_PASSWORD="postgres"
+$env:SERVICE_A_DB_PASSWORD="1234"
 ```
 
-Optional issuer/audience overrides:
+Issuer/audience:
 
 ```powershell
 $env:SERVICE_A_ISSUER="http://localhost:9000"
@@ -33,16 +49,35 @@ $env:SERVICE_A_AUDIENCE_B="service-b"
 $env:SERVICE_B_AUDIENCE="service-b"
 ```
 
-Optional signing keys (recommended for stable restarts):
+JWT keys:
 
 ```powershell
 $env:SERVICE_A_PRIVATE_KEY_PATH="D:\\keys\\private.pem"
 $env:SERVICE_A_PUBLIC_KEY_PATH="D:\\keys\\public.pem"
+$env:SERVICE_A_KEY_ID="key-v2"
 ```
 
-If keys are not provided, `service-a` generates an ephemeral RSA key pair at startup.
+Optional key rotation (old public keys):
 
-## Run services
+```powershell
+$env:SERVICE_A_RETIRED_PUBLIC_KEYS="key-v1=D:\\keys\\key-v1-public.pem;key-v0=D:\\keys\\key-v0-public.pem"
+```
+
+Service-to-service token client:
+
+```powershell
+$env:SERVICE_A_SERVICE_CLIENT_ID="internal-client"
+$env:SERVICE_A_SERVICE_CLIENT_SECRET="internal-secret"
+$env:SERVICE_A_SERVICE_CLIENT_SCOPES="service.a.read,service.b.read"
+```
+
+Service-b strict algorithm policy:
+
+```powershell
+$env:SERVICE_B_ALLOWED_JWS_ALGORITHM="RS256"
+```
+
+## Run
 
 Start `service-a`:
 
@@ -51,146 +86,49 @@ cd service-a
 .\mvnw spring-boot:run
 ```
 
-Start `service-b` in another terminal:
+Start `service-b`:
 
 ```powershell
 cd service-b
 .\mvnw spring-boot:run
 ```
 
-Start React SPA in a third terminal:
+## Token APIs (service-a)
 
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-Open: `http://127.0.0.1:8085`
-
-## Swagger UI
-
-1. Service A Swagger UI: `http://localhost:9000/swagger-ui.html`
-2. Service B Swagger UI: `http://localhost:9001/swagger-ui.html`
-3. OpenAPI docs:
-1. `http://localhost:9000/v3/api-docs`
-2. `http://localhost:9001/v3/api-docs`
-
-To call protected endpoints from Swagger, click **Authorize** and paste a bearer token from `service-a`.
-
-## React SPA PKCE demo
-
-The `frontend/` app demonstrates:
-
-1. OAuth2 Authorization Code + PKCE login using `pkce-client`
-2. Token exchange from browser (`/oauth2/token`)
-3. Calling:
-1. `GET /api/a/secure`
-2. `GET /api/b/secure`
-
-Notes:
-
-1. Default `pkce-client` redirect URI in `service-a` is already `http://127.0.0.1:8085/callback`.
-2. CORS is enabled in both services for `http://127.0.0.1:8085` and `http://localhost:8085`.
-
-## Custom user registration and login API (service-a)
-
-Create user (password is stored as BCrypt hash in DB):
-
-```powershell
-curl -X POST http://localhost:9000/api/auth/register `
-  -H "Content-Type: application/json" `
-  -d "{\"username\":\"appuser\",\"password\":\"appuser123\",\"roles\":[\"APP_USER\"]}"
-```
-
-Login and get JWT:
+1. User login token:
 
 ```powershell
 curl -X POST http://localhost:9000/api/auth/login `
   -H "Content-Type: application/json" `
-  -d "{\"username\":\"appuser\",\"password\":\"appuser123\"}"
+  -d "{\"username\":\"demo\",\"password\":\"demo1234\"}"
 ```
 
-Use returned `data.accessToken` as bearer token for both services.
-
-## Role-scope management API (service-a)
-
-Create/update role with scopes:
+2. Service client token:
 
 ```powershell
-curl -X POST http://localhost:9000/api/admin/roles `
-  -H "Authorization: Bearer <ACCESS_TOKEN_WITH_service.a.read>" `
+curl -X POST http://localhost:9000/api/auth/service-token `
   -H "Content-Type: application/json" `
-  -d "{\"roleName\":\"ONLY_B\",\"description\":\"Service B only\",\"scopes\":[\"service.b.read\"]}"
+  -d "{\"clientId\":\"internal-client\",\"clientSecret\":\"internal-secret\"}"
 ```
 
-Assign roles to user:
+Use `data.accessToken` as bearer token.
 
-```powershell
-curl -X POST http://localhost:9000/api/admin/users/appuser/roles `
-  -H "Authorization: Bearer <ACCESS_TOKEN_WITH_service.a.read>" `
-  -H "Content-Type: application/json" `
-  -d "{\"roles\":[\"ONLY_B\"]}"
+## JWKS Endpoint (service-a)
+
+Public keys:
+
+```text
+http://localhost:9000/.well-known/jwks.json
 ```
 
-Get effective scopes derived from user roles:
-
-```powershell
-curl -X GET http://localhost:9000/api/admin/users/appuser/scopes `
-  -H "Authorization: Bearer <ACCESS_TOKEN_WITH_service.a.read>"
-```
-
-## Default seeded identities
-
-1. Demo user: `demo` / `demo1234`
-2. Default role: `APP_USER` -> `service.a.read`, `service.b.read`
-3. Additional roles: `SERVICE_A_READER`, `SERVICE_B_READER`
-4. PKCE client: `pkce-client`
-5. Client credentials client: `internal-client` / `internal-secret`
-
-## Token flow examples
-
-### Client Credentials
-
-```powershell
-curl -u internal-client:internal-secret `
-  -d "grant_type=client_credentials&scope=service.a.read service.b.read" `
-  http://localhost:9000/oauth2/token
-```
-
-Use returned `access_token`:
+## Protected API Calls
 
 ```powershell
 curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://localhost:9000/api/a/secure
 curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://localhost:9001/api/b/secure
 ```
 
-### Authorization Code + PKCE
+## Swagger
 
-1. Generate verifier/challenge (any PKCE helper tool is fine).
-2. Open browser:
-
-```text
-http://localhost:9000/oauth2/authorize?response_type=code&client_id=pkce-client&scope=openid%20service.a.read%20service.b.read&redirect_uri=http://127.0.0.1:8085/callback&code_challenge=<CODE_CHALLENGE>&code_challenge_method=S256&state=abc123
-```
-
-3. Log in with `demo/demo1234`.
-4. Copy `code` from redirected URL.
-5. Exchange token:
-
-```powershell
-curl -d "grant_type=authorization_code&client_id=pkce-client&code=<CODE>&redirect_uri=http://127.0.0.1:8085/callback&code_verifier=<CODE_VERIFIER>" `
-  http://localhost:9000/oauth2/token
-```
-
-## Test
-
-Run tests:
-
-```powershell
-cd service-a
-.\mvnw test
-
-cd ..\service-b
-.\mvnw test
-```
+1. Service A: `http://localhost:9000/swagger-ui.html`
+2. Service B: `http://localhost:9001/swagger-ui.html`
