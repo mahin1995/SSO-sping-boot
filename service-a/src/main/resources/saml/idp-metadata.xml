@@ -1,0 +1,12 @@
+﻿<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="urn:example:idp">
+  <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol" WantAuthnRequestsSigned="false">
+    <KeyDescriptor use="signing">
+      <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+        <ds:X509Data>
+          <ds:X509Certificate>MIIDZzCCAk+gAwIBAgIILKb0x1mzkgkwDQYJKoZIhvcNAQEMBQAwYjELMAkGA1UEBhMCQkQxDjAMBgNVBAgTBURoYWthMQ4wDAYDVQQHEwVEaGFrYTEQMA4GA1UEChMHRXhhbXBsZTEMMAoGA1UECxMDRGV2MRMwEQYDVQQDEwpTYW1wbGUgSWRQMB4XDTI2MDMwNzEzNDE0MloXDTM2MDMwNDEzNDE0MlowYjELMAkGA1UEBhMCQkQxDjAMBgNVBAgTBURoYWthMQ4wDAYDVQQHEwVEaGFrYTEQMA4GA1UEChMHRXhhbXBsZTEMMAoGA1UECxMDRGV2MRMwEQYDVQQDEwpTYW1wbGUgSWRQMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlJwEqmJREY4d00Cr/DO68BsisqoalwLzettI0RKQUl9rrJLV8aliX6wZO8jaxBkvStILQqHEL7ORB4zT6MI50ob7ny44Dzzdce8MBd2LVkpJJgrBczlKg4yEyUAsLlSBMlp2KDwswKQRx2esiZpPcnDhclAcX6kmpwSVC9i7rj3PISWTgZFrdFi0oq9cSKD1X9cS1vO8GuWqT0JHggiuDqrv2FjFNT7FZ4imV/P8EWAQWEpL+MdgEpMrZY6E61hYnPSQ0qSms1Z9MaAUilOe90XnALA8dRPQG12TGYVggB94v3tOmfy7MNMyZiFqGKwiug7Jn6MgjcfxOMDxlZkzlwIDAQABoyEwHzAdBgNVHQ4EFgQUQk9H61F2PvawdqF48TWRYfOM8wMwDQYJKoZIhvcNAQEMBQADggEBAF9JEB8wU5kCpYTR8qEOkoX6xXMWoJWrU+Wxye53uT5zVkwQHyiRmfkNgHCS2ow+ohVE0wpAkoxTZ/W6pet3fG6IQyJTXuXO9ZLg3Yh/Rr7/ObPuBnsD/WjV6h4JYvEsa57h2UHASyYYF+WVjGAfvjAjD6AhIOt4cLHZgWr6IC+rZaGdd91/NSL7DG6KxU4TdaMlVvKDxEzWdC+aE84kzRmTg4aQbMHIgAKLzo67AGNTftnHIuWrxLRHM8Px47aIYh2rmPY275k7JCMBmMLieGTjVkyF6iv2I2q633QMAfzNXChRIOH1MrW9SwH9HyB/ZmqE5rEYUaS6qFu8pQ6gQ9w=</ds:X509Certificate>
+        </ds:X509Data>
+      </ds:KeyInfo>
+    </KeyDescriptor>
+    <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="http://localhost:8080/idp/sso"/>
+  </IDPSSODescriptor>
+</EntityDescriptor>

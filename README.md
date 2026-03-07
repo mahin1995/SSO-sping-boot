@@ -1,47 +1,38 @@
-# Two-Service OAuth2 Setup (Spring Boot)
+# Two-Service SAML SSO Setup (Spring Boot)
 
-This repo contains two services:
+This repo now contains a clean SAML-based setup:
 
-1. `service-a` (port `9000`): OAuth2 Authorization Server + Resource Server  
-2. `service-b` (port `9001`): Resource Server
+1. `service-a` (port `9000`) - SAML Service Provider + protected API
+2. `service-b` (port `9001`) - SAML Service Provider + protected API
 
-Both services trust JWTs issued by `service-a`.
+Both services are configured as relying parties and should trust the same IdP.
 
 ## Prerequisites
 
 1. Java 21
-2. PostgreSQL (external instance)
-3. Internet access for first Maven wrapper dependency download
+2. Maven Wrapper (already included in each service)
+3. A SAML IdP (Keycloak/Okta/Azure AD/ADFS) with metadata URL
 
-## Environment variables
+## Default Behavior
 
-Set DB credentials for `service-a`:
+For local bootstrapping, each service has a classpath sample metadata file:
 
-```powershell
-$env:SERVICE_A_DB_URL="jdbc:postgresql://localhost:5432/service_a"
-$env:SERVICE_A_DB_USERNAME="postgres"
-$env:SERVICE_A_DB_PASSWORD="postgres"
-```
+- `classpath:saml/idp-metadata.xml`
 
-Optional issuer/audience overrides:
+This is only for startup/demo wiring. For real login flow, configure real IdP metadata URLs.
 
-```powershell
-$env:SERVICE_A_ISSUER="http://localhost:9000"
-$env:SERVICE_A_AUDIENCE_A="service-a"
-$env:SERVICE_A_AUDIENCE_B="service-b"
-$env:SERVICE_B_AUDIENCE="service-b"
-```
+## Environment Variables
 
-Optional signing keys (recommended for stable restarts):
+PowerShell example:
 
 ```powershell
-$env:SERVICE_A_PRIVATE_KEY_PATH="D:\\keys\\private.pem"
-$env:SERVICE_A_PUBLIC_KEY_PATH="D:\\keys\\public.pem"
+$env:SERVICE_A_SAML_IDP_METADATA_URI="https://your-idp.example.com/realms/yourrealm/protocol/saml/descriptor"
+$env:SERVICE_B_SAML_IDP_METADATA_URI="https://your-idp.example.com/realms/yourrealm/protocol/saml/descriptor"
 ```
 
-If keys are not provided, `service-a` generates an ephemeral RSA key pair at startup.
+Use the same IdP metadata in both services for SSO.
 
-## Run services
+## Run Services
 
 Start `service-a`:
 
@@ -50,116 +41,46 @@ cd service-a
 .\mvnw spring-boot:run
 ```
 
-Start `service-b` in another terminal:
+Start `service-b` in a second terminal:
 
 ```powershell
 cd service-b
 .\mvnw spring-boot:run
 ```
 
-## Swagger UI
+## SP Metadata Endpoints
 
-1. Service A Swagger UI: `http://localhost:9000/swagger-ui.html`
-2. Service B Swagger UI: `http://localhost:9001/swagger-ui.html`
-3. OpenAPI docs:
-1. `http://localhost:9000/v3/api-docs`
-2. `http://localhost:9001/v3/api-docs`
+Expose these to your IdP app/client configuration:
 
-To call protected endpoints from Swagger, click **Authorize** and paste a bearer token from `service-a`.
+1. `http://localhost:9000/saml2/service-provider-metadata/shared-idp`
+2. `http://localhost:9001/saml2/service-provider-metadata/shared-idp`
 
-## Custom user registration and login API (service-a)
+## Login Flow
 
-Create user (password is stored as BCrypt hash in DB):
+1. Open:
+   - `http://localhost:9000/api/a/secure`
+   - `http://localhost:9001/api/b/secure`
+2. Anonymous request redirects to:
+   - `/saml2/authenticate/shared-idp`
+3. IdP login success returns to each service ACS endpoint:
+   - `/login/saml2/sso/shared-idp`
+4. Both services use their own session after successful SAML authentication.
 
-```powershell
-curl -X POST http://localhost:9000/api/auth/register `
-  -H "Content-Type: application/json" `
-  -d "{\"username\":\"appuser\",\"password\":\"appuser123\",\"roles\":[\"APP_USER\"]}"
-```
+## Swagger
 
-Login and get JWT:
+1. Service A Swagger: `http://localhost:9000/swagger-ui.html`
+2. Service B Swagger: `http://localhost:9001/swagger-ui.html`
 
-```powershell
-curl -X POST http://localhost:9000/api/auth/login `
-  -H "Content-Type: application/json" `
-  -d "{\"username\":\"appuser\",\"password\":\"appuser123\"}"
-```
+Swagger endpoints are public; protected APIs still require SAML login/session.
 
-Use returned `data.accessToken` as bearer token for both services.
+## Protected APIs
 
-## Role-scope management API (service-a)
+1. Service A: `GET http://localhost:9000/api/a/secure`
+2. Service B: `GET http://localhost:9001/api/b/secure`
 
-Create/update role with scopes:
-
-```powershell
-curl -X POST http://localhost:9000/api/admin/roles `
-  -H "Authorization: Bearer <ACCESS_TOKEN_WITH_service.a.read>" `
-  -H "Content-Type: application/json" `
-  -d "{\"roleName\":\"ONLY_B\",\"description\":\"Service B only\",\"scopes\":[\"service.b.read\"]}"
-```
-
-Assign roles to user:
-
-```powershell
-curl -X POST http://localhost:9000/api/admin/users/appuser/roles `
-  -H "Authorization: Bearer <ACCESS_TOKEN_WITH_service.a.read>" `
-  -H "Content-Type: application/json" `
-  -d "{\"roles\":[\"ONLY_B\"]}"
-```
-
-Get effective scopes derived from user roles:
-
-```powershell
-curl -X GET http://localhost:9000/api/admin/users/appuser/scopes `
-  -H "Authorization: Bearer <ACCESS_TOKEN_WITH_service.a.read>"
-```
-
-## Default seeded identities
-
-1. Demo user: `demo` / `demo1234`
-2. Default role: `APP_USER` -> `service.a.read`, `service.b.read`
-3. Additional roles: `SERVICE_A_READER`, `SERVICE_B_READER`
-4. PKCE client: `pkce-client`
-5. Client credentials client: `internal-client` / `internal-secret`
-
-## Token flow examples
-
-### Client Credentials
-
-```powershell
-curl -u internal-client:internal-secret `
-  -d "grant_type=client_credentials&scope=service.a.read service.b.read" `
-  http://localhost:9000/oauth2/token
-```
-
-Use returned `access_token`:
-
-```powershell
-curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://localhost:9000/api/a/secure
-curl -H "Authorization: Bearer <ACCESS_TOKEN>" http://localhost:9001/api/b/secure
-```
-
-### Authorization Code + PKCE
-
-1. Generate verifier/challenge (any PKCE helper tool is fine).
-2. Open browser:
-
-```text
-http://localhost:9000/oauth2/authorize?response_type=code&client_id=pkce-client&scope=openid%20service.a.read%20service.b.read&redirect_uri=http://127.0.0.1:8085/callback&code_challenge=<CODE_CHALLENGE>&code_challenge_method=S256&state=abc123
-```
-
-3. Log in with `demo/demo1234`.
-4. Copy `code` from redirected URL.
-5. Exchange token:
-
-```powershell
-curl -d "grant_type=authorization_code&client_id=pkce-client&code=<CODE>&redirect_uri=http://127.0.0.1:8085/callback&code_verifier=<CODE_VERIFIER>" `
-  http://localhost:9000/oauth2/token
-```
+Response includes subject, authorities, SAML registration id, and attribute keys.
 
 ## Test
-
-Run tests:
 
 ```powershell
 cd service-a
