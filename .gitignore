@@ -1,2 +1,5 @@
 .vscode
 ./.vscode
+
+./fronend/assets
+./fronend/node_module
