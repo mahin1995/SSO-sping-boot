@@ -44,7 +44,7 @@ public class SecurityConfig {
 	SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
 		http.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers("/actuator/health", "/actuator/info").permitAll()
-						.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+						.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**").permitAll()
 						.requestMatchers("/api/b/secure").hasAuthority("SCOPE_service.b.read")
 						.anyRequest().authenticated())
 				.cors(Customizer.withDefaults())

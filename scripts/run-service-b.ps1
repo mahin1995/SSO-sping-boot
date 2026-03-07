@@ -1,9 +1,24 @@
 param(
-    [string]$EnvFile = ".env"
+    [string]$EnvFile = ".env.service-b"
 )
 
+if (-not (Test-Path $EnvFile)) {
+    $serviceLocalEnvFile = Join-Path "service-b" (Split-Path $EnvFile -Leaf)
+    if (Test-Path $serviceLocalEnvFile) {
+        Write-Host "Env file '$EnvFile' not found. Using '$serviceLocalEnvFile'."
+        $EnvFile = $serviceLocalEnvFile
+    }
+    elseif (Test-Path ".env") {
+        Write-Host "Env file '$EnvFile' not found. Falling back to '.env'."
+        $EnvFile = ".env"
+    }
+    else {
+        throw "Env file '$EnvFile' not found. Create it from .env.service-b.example."
+    }
+}
+
 & "$PSScriptRoot/load-dotenv.ps1" -Path $EnvFile
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if (-not $?) { exit 1 }
 
 Push-Location "$PSScriptRoot/../service-b"
 try {

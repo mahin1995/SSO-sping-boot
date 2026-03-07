@@ -17,18 +17,32 @@ No OAuth2 authorization flow is used.
 1. Java 21
 2. PostgreSQL
 
-## Use .env (Windows Friendly)
+## Use Separate Env Files (Windows Friendly)
 
-1. Copy `.env.example` to `.env`
-2. Edit values in `.env`
-3. Run services with scripts:
+1. Copy `.env.service-a.example` to `.env.service-a`
+2. Copy `.env.service-b.example` to `.env.service-b`
+3. Edit each file (secrets/modes must match where required)
+4. Run services with scripts:
 
 ```powershell
 .\scripts\run-service-a.ps1
 .\scripts\run-service-b.ps1
 ```
 
-This loads env vars from `.env` for the current process and starts each service.
+By default:
+
+1. `run-service-a.ps1` loads `.env.service-a`
+2. `run-service-b.ps1` loads `.env.service-b`
+3. If missing in repo root, scripts also try `service-a/.env.service-a` or `service-b/.env.service-b`
+
+Optional (custom file):
+
+```powershell
+.\scripts\run-service-a.ps1 -EnvFile ".env.service-a"
+.\scripts\run-service-b.ps1 -EnvFile ".env.service-b"
+```
+
+Backward compatibility: if service-specific env file is missing, each script falls back to `.env`.
 
 ## Token Mode Switch (Mutually Exclusive)
 
@@ -86,10 +100,16 @@ $env:SERVICE_B_JWKS_DECRYPT_SECRET="change-me-jwks-secret"
 JWT keys:
 
 ```powershell
-$env:SERVICE_A_PRIVATE_KEY_PATH="D:\\keys\\private.pem"
-$env:SERVICE_A_PUBLIC_KEY_PATH="D:\\keys\\public.pem"
+$env:SERVICE_A_PRIVATE_KEY_PATH="keys/private.pem"
+$env:SERVICE_A_PUBLIC_KEY_PATH="keys/public.pem"
 $env:SERVICE_A_KEY_ID="key-v2"
 ```
+
+Dev fallback (if env path not set):
+
+1. `service-a` will also try `keys/private.pem` + `keys/public.pem`
+2. Then it will try `service-a/keys/private.pem` + `service-a/keys/public.pem`
+3. Paths outside the current project root are ignored by `service-a` key loader
 
 Generate RSA key pair (Linux/macOS):
 

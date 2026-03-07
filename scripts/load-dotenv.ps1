@@ -3,7 +3,7 @@ param(
 )
 
 if (-not (Test-Path $Path)) {
-    throw ".env file not found at '$Path'. Create it from .env.example."
+    throw "Env file not found at '$Path'. Create it from the appropriate example file."
 }
 
 Get-Content $Path | ForEach-Object {
