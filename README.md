@@ -4,7 +4,7 @@ This repo runs with 2 Spring Boot services:
 
 1. `service-a` (`http://localhost:9000`)
    - Issues access tokens
-   - Exposes JWKS public keys
+   - Exposes encrypted JWKS payload
    - Protects `/api/a/secure`
 2. `service-b` (`http://localhost:9001`)
    - Validates `service-a` tokens
@@ -74,6 +74,13 @@ JWE shared secret:
 ```powershell
 $env:SERVICE_A_JWE_SECRET="change-me-jwe-secret"
 $env:SERVICE_B_JWE_SECRET="change-me-jwe-secret"
+```
+
+JWKS payload encryption secret:
+
+```powershell
+$env:SERVICE_A_JWKS_ENCRYPT_SECRET="change-me-jwks-secret"
+$env:SERVICE_B_JWKS_DECRYPT_SECRET="change-me-jwks-secret"
 ```
 
 JWT keys:
@@ -205,10 +212,20 @@ Token shape depends on selected mode (`jwe` or `opaque`).
 
 ## JWKS Endpoint (service-a)
 
-Public keys:
+Encrypted response wrapper (same shape on both endpoints):
 
 ```text
 http://localhost:9000/.well-known/jwks.json
+http://localhost:9000/api/auth/jwks
+```
+
+Response example:
+
+```json
+{
+  "format": "aes-gcm+base64",
+  "payload": "<base64-encrypted-jwks-json>"
+}
 ```
 
 Opaque introspection endpoint:

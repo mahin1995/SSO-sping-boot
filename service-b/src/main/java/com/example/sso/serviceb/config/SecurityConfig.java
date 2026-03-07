@@ -1,7 +1,20 @@
 package com.example.sso.serviceb.config;
 
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.List;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.jwk.source.RemoteJWKSet;
+import com.nimbusds.jose.proc.JWSKeySelector;
+import com.nimbusds.jose.proc.JWSVerificationKeySelector;
+import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jose.util.DefaultResourceRetriever;
+import com.nimbusds.jose.util.ResourceRetriever;
+import com.nimbusds.jwt.proc.ConfigurableJWTProcessor;
+import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -48,9 +61,34 @@ public class SecurityConfig {
 			@Value("${service-b.jwt.issuer:http://localhost:9000}") String issuer,
 			@Value("${service-b.jwt.jwk-set-uri:http://localhost:9000/.well-known/jwks.json}") String jwkSetUri,
 			@Value("${service-b.audience}") String expectedAudience,
-			@Value("${service-b.allowed-jws-algorithm:RS256}") String requiredJwsAlgorithm
+			@Value("${service-b.allowed-jws-algorithm:RS256}") String requiredJwsAlgorithm,
+			JwksPayloadCryptoService jwksPayloadCryptoService,
+			ObjectMapper objectMapper
 	) {
-		NimbusJwtDecoder jwtDecoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+		URL jwksUrl;
+		try {
+			jwksUrl = new URL(jwkSetUri);
+		}
+		catch (MalformedURLException ex) {
+			throw new IllegalStateException("Invalid service-b.jwt.jwk-set-uri: " + jwkSetUri, ex);
+		}
+
+		ResourceRetriever delegateRetriever = new DefaultResourceRetriever(2_000, 2_000, 1_048_576);
+		ResourceRetriever encryptedRetriever = new EncryptedJwksResourceRetriever(
+				delegateRetriever,
+				jwksPayloadCryptoService,
+				objectMapper
+		);
+
+		JWKSource<SecurityContext> jwkSource = new RemoteJWKSet<>(jwksUrl, encryptedRetriever);
+		ConfigurableJWTProcessor<SecurityContext> jwtProcessor = new DefaultJWTProcessor<>();
+		JWSKeySelector<SecurityContext> keySelector = new JWSVerificationKeySelector<>(
+				JWSAlgorithm.parse(requiredJwsAlgorithm),
+				jwkSource
+		);
+		jwtProcessor.setJWSKeySelector(keySelector);
+
+		NimbusJwtDecoder jwtDecoder = new NimbusJwtDecoder(jwtProcessor);
 		OAuth2TokenValidator<Jwt> validator = new DelegatingOAuth2TokenValidator<>(
 				JwtValidators.createDefaultWithIssuer(issuer),
 				new AudienceValidator(expectedAudience),

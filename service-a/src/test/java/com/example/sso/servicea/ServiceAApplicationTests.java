@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.List;
 import java.util.Map;
 
+import com.example.sso.servicea.config.JwksPayloadCryptoService;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +51,9 @@ class ServiceAApplicationTests {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	@Autowired
+	private JwksPayloadCryptoService jwksPayloadCryptoService;
+
 	@Test
 	void flywayMigrationsAreAppliedForRoleBasedUserTables() {
 		Integer appUsersTableCount = jdbcTemplate.queryForObject(
@@ -85,11 +90,24 @@ class ServiceAApplicationTests {
 	}
 
 	@Test
-	void jwksEndpointExposesPublicRsaKey() throws Exception {
-		mockMvc.perform(get("/.well-known/jwks.json"))
+	void jwksEndpointExposesEncryptedPublicRsaKeyPayload() throws Exception {
+		MvcResult result = mockMvc.perform(get("/.well-known/jwks.json"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.keys[0].kty").value("RSA"))
-				.andExpect(jsonPath("$.keys[0].kid").isNotEmpty());
+				.andExpect(jsonPath("$.format").value("aes-gcm+base64"))
+				.andExpect(jsonPath("$.payload").isString())
+				.andReturn();
+
+		String encryptedPayload = objectMapper.readTree(result.getResponse().getContentAsString())
+				.path("payload")
+				.asText();
+
+		String decryptedJwks = jwksPayloadCryptoService.decryptFromBase64(encryptedPayload);
+		JsonNode root = objectMapper.readTree(decryptedJwks);
+		JsonNode firstKey = root.path("keys").get(0);
+
+		assertThat(firstKey).isNotNull();
+		assertThat(firstKey.path("kty").asText()).isEqualTo("RSA");
+		assertThat(firstKey.path("kid").asText()).isNotBlank();
 	}
 
 	@Test
