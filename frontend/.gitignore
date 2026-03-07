@@ -1,0 +1,5 @@
+.vscode
+./.vscode
+
+./assets
+./node_module
