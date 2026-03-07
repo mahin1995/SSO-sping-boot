@@ -6,7 +6,11 @@ if (-not (Test-Path $Path)) {
     throw "Env file not found at '$Path'. Create it from the appropriate example file."
 }
 
-Get-Content $Path | ForEach-Object {
+$resolvedPath = (Resolve-Path $Path).Path
+$loadedKeys = New-Object System.Collections.Generic.List[string]
+$loadedCount = 0
+
+Get-Content $resolvedPath | ForEach-Object {
     $line = $_.Trim()
     if ([string]::IsNullOrWhiteSpace($line)) { return }
     if ($line.StartsWith("#")) { return }
@@ -22,6 +26,11 @@ Get-Content $Path | ForEach-Object {
     }
 
     [System.Environment]::SetEnvironmentVariable($key, $value, "Process")
+    $loadedCount++
+    $loadedKeys.Add($key)
 }
 
-Write-Host "Loaded env vars from $Path"
+Write-Host "Loaded $loadedCount env vars from $resolvedPath"
+if ($loadedCount -gt 0) {
+    Write-Host ("Loaded keys: " + ($loadedKeys -join ", "))
+}

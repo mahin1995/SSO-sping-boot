@@ -44,6 +44,14 @@ Optional (custom file):
 
 Backward compatibility: if service-specific env file is missing, each script falls back to `.env`.
 
+IDE run support (without PowerShell scripts):
+
+1. `service-a` auto-load order:
+   `.env.service-a` -> `service-a/.env.service-a` -> `../service-a/.env.service-a` -> `.env`
+2. `service-b` auto-load order:
+   `.env.service-b` -> `service-b/.env.service-b` -> `../service-b/.env.service-b` -> `.env`
+3. On startup you will see `[env-bootstrap][service-*] Loaded ... vars from ...` in console.
+
 ## Token Mode Switch (Mutually Exclusive)
 
 Set both services to the same mode:
